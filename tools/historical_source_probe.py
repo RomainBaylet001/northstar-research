@@ -31,3 +31,44 @@ for label, url in URLS.items():
                               "cdx_response": body[:700] if "cdx" in label else None}))
     except (HTTPError, URLError, TimeoutError, OSError) as err:
         print(json.dumps({"name": label, "error": str(err)[:200]}))
+
+
+# Check historical copies of official fund pages and complete-holdings mirrors.
+from urllib.parse import quote
+WAYBACK = {
+    "vanguard_vwce_aug": ("20260920113925", "https://www.vanguard.co.uk/professional/product/etf/equity/9679/vanguard-ftse-all-world-ucits-etf-usd-accumulating"),
+    "vanguard_vwce_jul": ("20260809141730", "https://www.vanguard.co.uk/professional/product/etf/equity/9679/ftse-all-world-ucits-etf-usd-accumulating"),
+}
+for label, (stamp, url) in WAYBACK.items():
+    archive_url = f"https://web.archive.org/web/{stamp}id_/{url}"
+    try:
+        with urlopen(Request(archive_url, headers=HEADERS), timeout=20) as res:
+            raw = res.read(3_000_000)
+            text = raw.decode("utf-8", errors="replace")
+            positions = len(re.findall(r'holdings details|holding name|fund composition|market value|download', text, re.I))
+            dates = sorted(set(re.findall(r"(?:[0-3]?[0-9]\s+(?:Jul|Aug|Sep)\s+2026)|2026-(?:07|08|09)-(?:30|31)", text, re.I)))[:15]
+            links = re.findall(r'href="([^"]+)"', text)
+            downloadable = [u for u in links if any(x in u.lower() for x in ("holdings", ".xlsx", ".csv", "portfolio"))][-10:]
+            print(json.dumps({"archive": label, "code": res.status, "bytes": len(raw),
+                              "dates": dates, "holdings_keywords": positions,
+                              "download_links": downloadable[:10], "has_html": "<html" in text[:3000].lower()}))
+    except Exception as err:
+        print(json.dumps({"archive": label, "error": str(err)[:250]}))
+
+CDX_URLS = {
+    "companymarketcap_usd": "https://companiesmarketcap.com/vanguard-ftse-all-world-ucits-etf-usd-accumulation/holdings/",
+    "companymarketcap_www": "https://www.companiesmarketcap.com/vanguard-ftse-all-world-ucits-etf-usd-accumulation/holdings/",
+    "companymarketcap_eur": "https://companiesmarketcap.com/eur/vanguard-ftse-all-world-ucits-etf-usd-accumulation/holdings/",
+    "companymarketcap_vfea": "https://companiesmarketcap.com/vanguard-ftse-emerging-markets-ucits-etf/holdings/",
+    "etftrace": "https://etftrace.com/fund/vwce",
+    "portfolio_terminal": "https://portfolio-terminal.com/etf/vwce/holdings",
+}
+for label, url in CDX_URLS.items():
+    try:
+        cdx = ("https://web.archive.org/cdx/search/cdx?url=" + quote(url, safe="") +
+               "&output=json&filter=statuscode%3A200&from=202608&to=202610&collapse=timestamp%3A6&fl=timestamp%2Coriginal")
+        with urlopen(Request(cdx, headers=HEADERS), timeout=17) as res:
+            records = json.loads(res.read(30_000))
+            print(json.dumps({"cdx_site": label, "dates": records[:9]}))
+    except Exception as err:
+        print(json.dumps({"cdx_site": label, "error": str(err)[:200]}))
