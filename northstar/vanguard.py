@@ -98,7 +98,12 @@ def normalize(raw):
         if isin and not re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}[0-9]", isin):
             raise IntegrityError("Malformed equity ISIN")
         if sedol and not re.fullmatch(r"[A-Z0-9]{7}", sedol):
-            raise IntegrityError("Malformed equity SEDOL")
+            # Provider sometimes emits placeholder/nonstandard SEDOLs.
+            # A valid ISIN is independently sufficient for stable matching.
+            if isin:
+                sedol = ""
+            else:
+                raise IntegrityError("Malformed SEDOL without usable ISIN")
         if not isin and not sedol:
             raise IntegrityError("Equity has neither ISIN nor SEDOL")
         weight = amount(h.get("marketValuePercentage"), "weight")
