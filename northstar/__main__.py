@@ -8,12 +8,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .compare import latest, snapshots
+from .quarterly import quarterly
 from .vanguard import FUNDS, collect, now, store
 
 
 def run(argv=None, fetch=None):
     parser = argparse.ArgumentParser(description="NORTHSTAR Vanguard research")
-    parser.add_argument("command", choices=("collect", "compare", "status"))
+    parser.add_argument("command", choices=("collect", "compare", "status", "quarterly"))
+    parser.add_argument("--year", type=int, default=datetime.now(timezone.utc).year,
+                        help="Calendar year for quarterly comparison (defaults to UTC current year)")
     parser.add_argument("--fund", choices=("VWCE", "VFEA", "all"), default="all")
     parser.add_argument("--root", type=Path, default=Path("."))
     args = parser.parse_args(argv)
@@ -30,18 +33,29 @@ def run(argv=None, fetch=None):
                     "official_as_of": snap["official_as_of"], "rows": snap["total_holdings"],
                     "archive": file.relative_to(root).as_posix(),
                 })
-            if args.command == "status":
-                result = {
-                    "fund": name, "status": "history",
-                    "dates": [record["official_as_of"] for _, record in snapshots(root, name)],
-                }
+            if args.command == "quarterly":
+                result = quarterly(root, name, args.year)
+                log["events"].append({
+                    "fund": name, "quarterly_report": result.get("report_path"),
+                    "year": args.year, "missing_quarter_dates": result["missing_quarter_dates"],
+                    "pairs": [{
+                        "period": p["period"], "status": p["status"],
+                        "added": len(p.get("additions", [])), "removed": len(p.get("removals", [])),
+                    } for p in result["comparisons"]],
+                })
             else:
-                result = latest(root, name)
-            log["events"].append({
-                "fund": name, "comparison": {k: v for k, v in result.items()
-                                             if k not in ("additions", "removals", "matched_changes", "allocations")},
-                "added": len(result.get("additions", [])), "removed": len(result.get("removals", [])),
-            })
+                if args.command == "status":
+                    result = {
+                        "fund": name, "status": "history",
+                        "dates": [record["official_as_of"] for _, record in snapshots(root, name)],
+                    }
+                else:
+                    result = latest(root, name)
+                log["events"].append({
+                    "fund": name, "comparison": {k: v for k, v in result.items()
+                                                 if k not in ("additions", "removals", "matched_changes", "allocations")},
+                    "added": len(result.get("additions", [])), "removed": len(result.get("removals", [])),
+                })
         except Exception as error:
             log["errors"].append({
                 "fund": name, "type": type(error).__name__,
