@@ -72,3 +72,27 @@ for label, url in CDX_URLS.items():
             print(json.dumps({"cdx_site": label, "dates": records[:9]}))
     except Exception as err:
         print(json.dumps({"cdx_site": label, "error": str(err)[:200]}))
+
+
+# Rebalix has historical monthly snapshots with explicit as-of dates.
+REBALIX = {
+    "vwce_fund": "https://rebalix.com/en/etf/IE00BK5BQT80",
+    "vwce_june_to_july": "https://rebalix.com/en/etf/IE00BK5BQT80/cronologia/2026-09",
+    "vwce_july_to_august": "https://rebalix.com/en/etf/IE00BK5BQT80/cronologia/2026-10",
+    "vwce_history": "https://rebalix.com/en/etf/IE00BK5BQT80/cronologia",
+    "vfea_fund": "https://rebalix.com/en/etf/IE00BK5BR733",
+    "vfea_july_to_august": "https://rebalix.com/en/etf/IE00BK5BR733/cronologia/2026-10",
+}
+for label, url in REBALIX.items():
+    try:
+        with urlopen(Request(url, headers=HEADERS), timeout=18) as res:
+            body = res.read(2_000_000).decode("utf-8", errors="replace")
+            links = re.findall(r'href=["\']([^"\']+)["\']', body, re.I)
+            extracted = [(u[:250]) for u in links if
+                         any(k in u.lower() for k in (".xlsx", ".csv", "download", "holdings", "portfolio"))][:25]
+            print(json.dumps({"rebalix": label, "status": res.status, "bytes": len(body),
+                              "asof_dates": sorted(set(re.findall(r"2026-(?:06|07|08|09)-(?:30|31)", body)))[:15],
+                              "links": extracted, "positions_of_xlsx": [m.start() for m in re.finditer(".xlsx", body)][:12],
+                              "positions_of_download": [m.start() for m in re.finditer("Download the full portfolio", body, re.I)][:4]}))
+    except Exception as err:
+        print(json.dumps({"rebalix": label, "error": str(err)[:200]}))
