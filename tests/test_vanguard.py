@@ -3,10 +3,12 @@ import json
 import tempfile
 import unittest
 from copy import deepcopy
+from datetime import date
 from pathlib import Path
 
 from northstar.__main__ import run
-from northstar.compare import compare, latest, snapshots
+from northstar.compare import compare, latest, markdown, snapshots
+from northstar.quarterly import quarterly, quarters_for_year
 from northstar.vanguard import FUNDS, IntegrityError, collect, fingerprint, normalize, store
 
 
@@ -200,6 +202,80 @@ class HistoryTests(unittest.TestCase):
             self.assertTrue((root / output["report_path"]).is_file())
             self.assertEqual(len(list((root / "logs" / "runs").glob("*.json"))), 2)
             self.assertEqual(run(["status", "--fund", "VWCE", "--root", d]), 0)
+
+
+class QuarterlyTests(unittest.TestCase):
+    def test_quarter_dates_are_exact_and_future_is_not_fabricated(self):
+        self.assertEqual(quarters_for_year(2026, date(2026, 10, 29)), [
+            ("Q1", "2026-03-31"), ("Q2", "2026-06-30"), ("Q3", "2026-09-30")
+        ])
+        self.assertEqual(quarters_for_year(2027, date(2026, 10, 29)), [])
+
+    def test_missing_quarters_are_explicitly_unverifiable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store(sample(date="2026-09-30"), folder)
+            result = quarterly(folder, "VWCE", 2026, today=date(2026, 10, 29))
+            self.assertEqual(result["missing_quarter_dates"], ["2026-03-31", "2026-06-30"])
+            self.assertTrue(all(p["status"] == "unverifiable_missing_complete_snapshots"
+                                for p in result["comparisons"]))
+            text = (Path(folder) / result["report_path"]).read_text()
+            self.assertIn("Unavailable", text)
+            self.assertIn("Cannot verify additions/removals", text)
+            self.assertNotIn("## Added", text)
+
+    def test_quarterly_validates_adjacent_and_cumulative_changes_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            q1 = securities("2026-03-31")
+            q2 = securities("2026-06-30")
+            q2.pop(3)
+            q2.append(dict(q2[5], isin="US9999999990", sedol1="9999999",
+                           ticker="Q2NEW", issuerName="Q2 entrant"))
+            q3 = deepcopy(q2)
+            for row in q3:
+                row["effectiveDate"] = "2026-09-30"
+            q3 = [row for row in q3 if row["ticker"] != "T4"]
+            q3.append(dict(q3[5], isin="US8888888880", sedol1="8888888",
+                           ticker="Q3NEW", issuerName="Q3 entrant"))
+            for rows, d in ((q1, "2026-03-31"), (q2, "2026-06-30"), (q3, "2026-09-30")):
+                store(sample(date=d, rows=rows), folder)
+            result = quarterly(folder, "VWCE", 2026, today=date(2026, 10, 29))
+            self.assertFalse(result["missing_quarter_dates"])
+            self.assertEqual([(p["period"], len(p["additions"]), len(p["removals"]))
+                              for p in result["comparisons"]],
+                             [("Q1 → Q2", 1, 1), ("Q2 → Q3", 1, 1), ("Q1 → Q3", 2, 2)])
+            source = (Path(folder) / result["report_path"]).read_text()
+            self.assertIn("Q2 entrant", source)
+            self.assertIn("Q3 entrant", source)
+            self.assertNotIn("Issuer 100", source)
+            saved = json.loads((Path(folder) / "reports" / "quarterly" / "VWCE" / "2026.json").read_text())
+            self.assertNotIn("matched_changes", saved["comparisons"][0])
+            self.assertNotIn("allocations", saved["comparisons"][0])
+            # Derived reports are deterministic and idempotent.
+            previous = (Path(folder) / result["report_path"]).read_bytes()
+            quarterly(folder, "VWCE", 2026, today=date(2026, 10, 29))
+            self.assertEqual(previous, (Path(folder) / result["report_path"]).read_bytes())
+
+    def test_monthly_report_is_compact_but_full_raw_archive_is_retained(self):
+        with tempfile.TemporaryDirectory() as folder:
+            q1 = sample()
+            q2 = sample(date="2026-09-30")
+            store(q1, folder)
+            store(q2, folder)
+            report = latest(folder, "VWCE")
+            output = (Path(folder) / report["report_path"]).read_text()
+            self.assertNotIn("Largest weight changes", output)
+            self.assertNotIn("Issuer 100", output)
+            jpath = (Path(folder) / report["report_path"]).with_suffix(".json")
+            compact = json.loads(jpath.read_text())
+            self.assertNotIn("matched_changes", compact)
+            self.assertNotIn("allocations", compact)
+            self.assertEqual(len(snapshots(folder, "VWCE")[0][1]["raw_items"]), 120)
+
+    def test_quarterly_cli_runs_with_only_q3(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store(sample(date="2026-09-30"), folder)
+            self.assertEqual(run(["quarterly", "--fund", "VWCE", "--year", "2026", "--root", folder]), 0)
+            self.assertTrue((Path(folder) / "reports" / "quarterly" / "VWCE" / "2026.md").exists())
 
 
 if __name__ == "__main__":
