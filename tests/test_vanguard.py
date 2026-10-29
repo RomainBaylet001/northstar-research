@@ -92,6 +92,26 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(snap["total_holdings"], 121)
         self.assertEqual(len(snap["equities"]), 120)
 
+    def test_zero_weight_legacy_dummy_retained_only_in_raw_source(self):
+        rows = securities()
+        rows[3].update(isin=None, sedol1="9012158dummy", marketValuePercentage=0)
+        snap = collect("VWCE", fetch=lambda *args: response(rows))
+        self.assertEqual(len(snap["raw_items"]), 120)
+        self.assertEqual(len(snap["equities"]), 119)
+        self.assertEqual(len(snap["zero_weight_unidentified_equities"]), 1)
+
+    def test_nonzero_unidentified_security_is_blocked(self):
+        rows = securities()
+        rows[3].update(isin=None, sedol1="9012158dummy")
+        with self.assertRaisesRegex(IntegrityError, "Malformed SEDOL"):
+            collect("VWCE", fetch=lambda *args: response(rows))
+
+    def test_isin_suffices_when_sedol_is_placeholder(self):
+        rows = securities()
+        rows[3]["sedol1"] = "PLACEHOLDER"
+        snap = collect("VWCE", fetch=lambda *args: response(rows))
+        self.assertEqual(len(snap["equities"]), 120)
+
     def test_invalid_weights_block(self):
         rows = securities()
         rows[0]["marketValuePercentage"] = "-1"
