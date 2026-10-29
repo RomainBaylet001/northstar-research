@@ -102,9 +102,15 @@ def normalize(raw):
             # A valid ISIN is independently sufficient for stable matching.
             if isin:
                 sedol = ""
+            elif amount(h.get("marketValuePercentage"), "weight") == 0:
+                # A non-tradable, zero-value source row with a dummy ID is
+                # retained in raw_items, never in verified security joins.
+                continue
             else:
                 raise IntegrityError("Malformed SEDOL without usable ISIN")
         if not isin and not sedol:
+            if amount(h.get("marketValuePercentage"), "weight") == 0:
+                continue
             raise IntegrityError("Equity has neither ISIN nor SEDOL")
         weight = amount(h.get("marketValuePercentage"), "weight")
         if weight < 0 or weight > 100:
@@ -205,6 +211,15 @@ def collect(fund, fetch=request_graphql):
         "official_as_of": official_date, "retrieved_utc": now(),
         "source_page": cfg["page"], "source_endpoint": URL, "total_holdings": total,
         "source_sha256": fingerprint(rows), "raw_items": rows, "equities": normalize(rows),
+        "zero_weight_unidentified_equities": [
+            {"name": str(h.get("issuerName") or h.get("securityLongDescription") or ""),
+             "raw_isin": h.get("isin"), "raw_sedol": h.get("sedol1")}
+            for h in rows
+            if str(h.get("securityType") or "").upper().startswith("EQ.")
+            and str(h.get("marketValuePercentage")) in ("0", "0.0", "0.00")
+            and not re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}[0-9]", str(h.get("isin") or "").upper())
+            and not re.fullmatch(r"[A-Z0-9]{7}", str(h.get("sedol1") or "").upper())
+        ],
     }
 
 
