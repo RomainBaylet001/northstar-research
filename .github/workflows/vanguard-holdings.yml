@@ -49,27 +49,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Diagnose identifier coverage on the first Vanguard page
-        shell: bash
-        run: |
-          python - <<'PY'
-          import re
-          from northstar.vanguard import FUNDS, URL, QUERY, request_graphql
-          for fund, cfg in FUNDS.items():
-              cursor, rows = None, []
-              for page_no in range(40):
-                  d = request_graphql(URL, {"operationName": "NorthstarHoldings", "query": QUERY, "variables": {"ids": [cfg["port_id"]], "cursor": cursor}})
-                  h = d["data"]["borHoldings"][0]["holdings"]
-                  rows.extend(h["items"])
-                  cursor = h["lastItemKey"]
-                  if not cursor:
-                      break
-              equities = [h for h in rows if str(h.get("securityType") or "").upper().startswith("EQ.")]
-              missing = [h for h in equities if not re.fullmatch("[A-Z0-9]{7}", str(h.get("sedol1") or "").upper()) and not h.get("isin")]
-              print(f"{fund}: pages={page_no + 1} total={len(rows)} equities={len(equities)} missing_identifiers={len(missing)}")
-              for h in missing[:12]:
-                  print("  fields:", {k: h.get(k) for k in ("issuerName","securityType","isin","sedol1","ticker","marketValuePercentage")})
-          PY
       - name: Verify full official holdings for both funds without publishing
         run: python -m northstar collect --root "$RUNNER_TEMP/northstar-probe"
 
