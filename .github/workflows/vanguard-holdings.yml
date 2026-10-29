@@ -56,12 +56,18 @@ jobs:
           import re
           from northstar.vanguard import FUNDS, URL, QUERY, request_graphql
           for fund, cfg in FUNDS.items():
-              d = request_graphql(URL, {"operationName": "NorthstarHoldings", "query": QUERY, "variables": {"ids": [cfg["port_id"]], "cursor": None}})
-              items = d["data"]["borHoldings"][0]["holdings"]["items"]
-              equities = [h for h in items if str(h.get("securityType") or "").upper().startswith("EQ.")]
+              cursor, rows = None, []
+              for page_no in range(40):
+                  d = request_graphql(URL, {"operationName": "NorthstarHoldings", "query": QUERY, "variables": {"ids": [cfg["port_id"]], "cursor": cursor}})
+                  h = d["data"]["borHoldings"][0]["holdings"]
+                  rows.extend(h["items"])
+                  cursor = h["lastItemKey"]
+                  if not cursor:
+                      break
+              equities = [h for h in rows if str(h.get("securityType") or "").upper().startswith("EQ.")]
               missing = [h for h in equities if not re.fullmatch("[A-Z0-9]{7}", str(h.get("sedol1") or "").upper()) and not h.get("isin")]
-              print(f"{fund}: page={len(items)} equities={len(equities)} no_valid_sedol_or_isin={len(missing)}")
-              for h in missing[:10]:
+              print(f"{fund}: pages={page_no + 1} total={len(rows)} equities={len(equities)} missing_identifiers={len(missing)}")
+              for h in missing[:12]:
                   print("  fields:", {k: h.get(k) for k in ("issuerName","securityType","isin","sedol1","ticker","marketValuePercentage")})
           PY
       - name: Verify full official holdings for both funds without publishing
