@@ -1,0 +1,46 @@
+{
+  "start_utc": "2026-10-29T06:13:20+00:00",
+  "operation": "collect",
+  "events": [
+    {
+      "fund": "VWCE",
+      "status": "already_archived",
+      "official_as_of": "2026-09-30",
+      "rows": 4235,
+      "archive": "data/etf/snapshots/VWCE/2026-09-30/51a414b12a39efdca83b78cf6a3ba8e9cc44560dafe6c5cc33c91fa0a8bd5eaa.json"
+    },
+    {
+      "fund": "VWCE",
+      "comparison": {
+        "status": "insufficient_distinct_official_snapshots",
+        "fund": "VWCE",
+        "available_dates": [
+          "2026-09-30"
+        ]
+      },
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "fund": "VFEA",
+      "status": "already_archived",
+      "official_as_of": "2026-09-30",
+      "rows": 2382,
+      "archive": "data/etf/snapshots/VFEA/2026-09-30/1d53f74fd06cca420f167ceb29874fb7e42d1f4a6a648ccefdb3cdcc5eac5a99.json"
+    },
+    {
+      "fund": "VFEA",
+      "comparison": {
+        "status": "insufficient_distinct_official_snapshots",
+        "fund": "VFEA",
+        "available_dates": [
+          "2026-09-30"
+        ]
+      },
+      "added": 0,
+      "removed": 0
+    }
+  ],
+  "errors": [],
+  "end_utc": "2026-10-29T06:13:21+00:00"
+}
