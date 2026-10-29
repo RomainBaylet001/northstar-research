@@ -6,7 +6,7 @@ An independent research repository. **Do not merge into `northstar-finance`** wi
 
 Implemented: official Vanguard UK professional GPX collector for `VWCE` (port ID 9679, ISIN `IE00BK5BQT80`) and `VFEA` (port ID 9678, ISIN `IE00BK5BR733`); full cursor pagination; identity and date validation; archived immutable source rows; stable ISIN/SEDOL normalization; distinct-as-of comparisons; detailed Markdown/JSON reports; run/error logs; scheduled GitHub Actions; offline unit tests. Zero third-party dependencies.
 
-**Status:** Source pages and API schema patterns have been researched; live API retrieval is **not verified** in the authoring environment (network/DNS unavailable). GitHub Actions' first real run is the live integration test. If it fails, logs will explain why. No backfilled or invented holdings changes. Newly published official dates may be monthly, even though the collector checks weekly.
+**Live integration status (29 October 2026): PASSED on GitHub-hosted runners.** The official API returned 4,235 rows for VWCE and 2,382 for VFEA, both dated 30 September 2026. One zero-weight legacy Hanergy row in each fund has no usable ISIN/SEDOL: both are retained in raw sources and explicitly excluded from verified equity joins. Synthetic test records are never committed as real holdings. Production archive commits begin only after merge. Comparison reports require two distinct official snapshot dates.
 
 ## Commands
 
@@ -19,7 +19,7 @@ python -m northstar status --root .
 
 `collect` makes HTTPS POST requests only to `https://www.vanguard.co.uk/gpx/graphql`, archives only after complete pagination, and saves immutable `data/etf/snapshots/<ETF>/<OFFICIAL_AS_OF>/<SOURCE_SHA256>.json` files. A newly retrieved file with the same date and same contents is a no-op; a revised file with the same as-of date gets a second immutable version and **blocks further comparisons for manual review**. A new official month creates an additional dated snapshot and a full difference report in `reports/etf/<ETF>/`. A first snapshot produces a truthful insufficient-history status.
 
-The scheduled workflow runs every **Wednesday 04:00 UTC / 09:30 IST** and may be started manually using GitHub Actions → Vanguard official holdings archive → Run workflow. Logs are committed even after partial failure; the workflow is marked failed, not green, if collection/verification fails. GitHub schedule executions can be delayed/skipped by GitHub.
+The scheduled workflow runs every **Wednesday 04:00 UTC / 09:30 IST** and may be started manually using GitHub Actions → Vanguard holdings — archive and verify → Run workflow. Logs are committed even after partial failure; the workflow is marked failed, not green, if collection/verification fails. GitHub schedule executions can be delayed/skipped by GitHub.
 
 ## Data layers planned
 
@@ -58,8 +58,11 @@ reports/investment/                       # Phase 3: analyst reviews and benchma
 - Official GraphQL endpoint: https://www.vanguard.co.uk/gpx/graphql
 - SEC EDGAR 13F (planned phase 2): https://www.sec.gov/edgar/search/ ; https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 
-## Initial installation
+## Deployment and permissions
 
-Create a **new, empty** repository named `northstar-research` in the GitHub account and grant the GitHub ChatGPT connection access to it. Import these files as the repository's initial commit. If your GitHub default branch is protected, the scheduled committer needs permission to push data to a designated data branch and the workflow must be adjusted. Workflow token needs only `contents: write`, not repo-admin or external API keys. Prefer a private repository if the watchlist or reports might contain private financial data.
+The separate repository `RomainBaylet001/northstar-research` is already created. Merge the Phase 1 pull request after both the offline tests and read-only live API probe pass. A push to `main` triggers initial production collection; afterward the workflow runs weekly (and supports manual dispatch). The live probe uses `contents: read`; the scheduled collector alone uses `contents: write`. A GitHub Actions bot commit will not recursively trigger itself.
+
+Archive contents include public fund data only. The repository is currently PUBLIC; do not commit any personal holdings, credentials, or proprietary research. GitHub Actions access and default-branch settings must permit the collection job to push. The next full snapshot date may be monthly rather than weekly.
+
 
 **Not implemented yet:** quarterly 13F collector, manager selection, equities scoring, valuation scenario engine, return benchmarking, or automated LLM research. The Vanguard collector does not magically perform those tasks. They belong in separate, tested phases with clear source provenance.
