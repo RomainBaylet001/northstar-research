@@ -96,3 +96,20 @@ for label, url in REBALIX.items():
                               "positions_of_download": [m.start() for m in re.finditer("Download the full portfolio", body, re.I)][:4]}))
     except Exception as err:
         print(json.dumps({"rebalix": label, "error": str(err)[:200]}))
+
+
+# Inspect client-side Excel export wiring and any embedded source rows, without copying holdings.
+for label, url in {"vwce":"https://rebalix.com/en/etf/IE00BK5BQT80",
+                   "vfea":"https://rebalix.com/en/etf/IE00BK5BR733"}.items():
+    try:
+        with urlopen(Request(url, headers=HEADERS),timeout=18) as res:
+            body=res.read(2_000_000).decode("utf-8", errors="replace")
+        probes=["Download the full portfolio","full portfolio","xlsx","excel","holdings","positions",
+                "portfolio", "2026-07-31","2026-08-31", "2026-09-30", "2026-07", "__next_f"]
+        spans={}
+        for token in probes:
+            idx=body.lower().find(token.lower())
+            spans[token]={"index":idx, "context":body[max(0,idx-180):idx+290] if idx>=0 else ""}
+        identifiers=set(re.findall(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b",body))
+        print(json.dumps({"rebalix_details":label,"bytes":len(body),"isin_distinct":len(identifiers),"snippets":spans}))
+    except Exception as err:print(json.dumps({"rebalix_details":label,"error":str(err)[:200]}))
