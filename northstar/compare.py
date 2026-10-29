@@ -116,7 +116,10 @@ def compare(old, new):
         "removals": sorted(removals, key=lambda x: x["name"]),
         "matched_changes": sorted(changes, key=lambda x: abs(Decimal(x["delta_bps"])), reverse=True),
         "allocations": allocations,
+        "unidentified_zero_weight_old": old.get("zero_weight_unidentified_equities", []),
+        "unidentified_zero_weight_new": new.get("zero_weight_unidentified_equities", []),
         "limits": [
+            "Unidentifiable zero-weight source records are retained in full archives but excluded from verified identity joins.",
             "ETF position additions are not necessarily additions to the underlying FTSE index.",
             "Changes in market weights combine price movement, trading, currency, and ETF flows.",
             "Fund share-count changes alone do not prove institutional accumulation.",
@@ -136,7 +139,11 @@ def markdown(report):
         "",
         "Primary source: " + report["new_source"],
         "",
-        "Equity positions: " + str(report["old_count"]) + " → " + str(report["new_count"]),
+        "Equity positions with verified identifiers: " + str(report["old_count"]) + " → " + str(report["new_count"]),
+        "",
+        "Zero-weight, unidentified source rows retained but excluded from comparison: " +
+        str(len(report["unidentified_zero_weight_old"])) + " → " +
+        str(len(report["unidentified_zero_weight_new"])),
         "",
         "Identifier-matched additions: **" + str(len(report["additions"])) + "**; removals: **" + str(len(report["removals"])) + "**.",
         "",
