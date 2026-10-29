@@ -90,16 +90,47 @@ for fund in FUNDS:
         "source_page":url, "source_sha256":sha, "equities":old_eq,
         "zero_weight_unidentified_equities":[],
     }
+    # An unchanged security normally keeps its ISIN. But a few corporate
+    # actions/venue changes can retain a ticker or name while changing ISIN.
+    # Quarantine ONLY unmatched potential migration pairs; never count them
+    # as either a new entry or an exit.
+    old_ids={r["isin"] for r in old_eq if r["isin"]}
+    new_ids={r["isin"] for r in new["equities"] if r["isin"]}
+    old_un=[r for r in old_eq if r["isin"] not in new_ids]
+    new_un=[r for r in new["equities"] if r["isin"] not in old_ids]
+    old_tickers={r["ticker"].strip().upper() for r in old_un if r["ticker"].strip()}
+    new_tickers={r["ticker"].strip().upper() for r in new_un if r["ticker"].strip()}
+    ticker_conflicts=old_tickers & new_tickers
+    def clean_name(row):
+        import unicodedata
+        name=unicodedata.normalize("NFKC",row["name"]).casefold()
+        return "".join(ch for ch in name if ch.isalnum())
+    old_names={clean_name(r) for r in old_un if clean_name(r)}
+    new_names={clean_name(r) for r in new_un if clean_name(r)}
+    name_conflicts=old_names & new_names
+    def ambiguous(r):
+        return (bool(r["ticker"].strip()) and r["ticker"].strip().upper() in ticker_conflicts) or clean_name(r) in name_conflicts
+    ambiguous_old=[r for r in old_un if ambiguous(r)]
+    ambiguous_new=[r for r in new_un if ambiguous(r)]
+    if len(ambiguous_old)+len(ambiguous_new)>80:
+        raise IntegrityError("Too many ambiguous corporate-action or cross-listing pairs to infer entries safely")
+    old_clean=dict(old,equities=[r for r in old_eq if r not in ambiguous_old])
+    new_clean=dict(new,equities=[r for r in new["equities"] if r not in ambiguous_new])
     try:
-        changes=compare(old,new)
+        changes=compare(old_clean,new_clean)
     except IntegrityError as exc:
         print(json.dumps({"fund":fund,"status":"quarantined_identity_diff","error":str(exc),"stats":stats,
-                          "old_equity_identifiers":len(old_eq),"new_equity_identifiers":len(new["equities"])}))
+                          "old_equity_identifiers":len(old_eq),"new_equity_identifiers":len(new["equities"]),
+                          "ticker_conflicts":sorted(ticker_conflicts)[:40]}))
         continue
     report={"fund":fund,"status":"verified_august_september_isin_comparison",
             "source_august":url, "source_august_sha256":sha,
             "source_september":archived[0].as_posix(),
             "august_equity_ids":len(old_eq), "september_equity_ids":len(new["equities"]),
+            "identity_ambiguities_excluded":{"old":len(ambiguous_old),"new":len(ambiguous_new),
+                "tickers":sorted(ticker_conflicts)[:40],
+                "previous":[{"name":r["name"],"ticker":r["ticker"],"isin":r["isin"]} for r in ambiguous_old[:20]],
+                "current":[{"name":r["name"],"ticker":r["ticker"],"isin":r["isin"]} for r in ambiguous_new[:20]]},
             "added":len(changes["additions"]), "removed":len(changes["removals"]),
             "entries":[{"name":x["name"],"ticker":x["ticker"],"isin":x["isin"],
                         "country":x["country"],"sector":x["sector"],"weight_pct":x["new_weight_pct"]}
