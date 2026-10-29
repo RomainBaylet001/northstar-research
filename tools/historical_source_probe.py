@@ -27,19 +27,14 @@ def inspect_xlsx(data):
                 v=cell.find("m:v",NS)
                 inline=cell.find("m:is",NS)
                 text=v.text if v is not None else "".join(inline.itertext()) if inline is not None else ""
-                if v is not None and cell.get("t")=="s":text=strings[int(text)]
-                vals.append([cell.get("r"), text[:120]])
+                if v is not None and cell.get("t")=="s" and text is not None:text=strings[int(text)]
+                vals.append([cell.get("r"), (text or "")[:120]])
             rows.append(vals)
         return {"shared_strings_count":len(strings), "worksheet":sheet, "first_rows":rows,
                 "worksheet_row_count":len(root.findall(".//m:sheetData/m:row",NS))}
 
 for fund, isin in IDENTIFIERS.items():
-    for variant, extra in [
-        ("latest", {}),
-        ("asOf", {"asOf": "2026-07-31"}),
-        ("date", {"date": "2026-07-31"}),
-        ("month", {"month": "2026-07"}),
-    ]:
+    for variant, extra in [("latest", {})]:
         url=BASE+"?"+urlencode({"isin":isin, "lang":"en",**extra})
         try:
             req=Request(url, headers={"User-Agent":"NORTHSTAR Research/1.0"})
