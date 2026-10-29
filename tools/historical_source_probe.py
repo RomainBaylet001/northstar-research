@@ -113,3 +113,15 @@ for label, url in {"vwce":"https://rebalix.com/en/etf/IE00BK5BQT80",
         identifiers=set(re.findall(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b",body))
         print(json.dumps({"rebalix_details":label,"bytes":len(body),"isin_distinct":len(identifiers),"snippets":spans}))
     except Exception as err:print(json.dumps({"rebalix_details":label,"error":str(err)[:200]}))
+
+
+# Locate the offered published-holdings Excel link exactly.
+for label, url in {"vwce":"https://rebalix.com/en/etf/IE00BK5BQT80",
+                   "vfea":"https://rebalix.com/en/etf/IE00BK5BR733"}.items():
+    try:
+        with urlopen(Request(url, headers=HEADERS), timeout=18) as res:
+            body=res.read(900_000).decode("utf-8", errors="replace")
+        idx=body.find("Download the published holdings")
+        print(json.dumps({"excel_link":label,"context":body[idx-800:idx+220] if idx>=0 else "not found"}))
+    except Exception as err:
+        print(json.dumps({"excel_link":label,"error":str(err)[:200]}))
