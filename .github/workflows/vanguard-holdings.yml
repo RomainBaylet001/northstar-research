@@ -72,8 +72,14 @@ jobs:
         run: |
           set +e
           python -m northstar collect --root .
-          result=$?
-          echo "result=$result" >> "$GITHUB_OUTPUT"
+          collect_result=$?
+          python -m northstar quarterly --root .
+          quarterly_result=$?
+          if [ "$collect_result" != "0" ] || [ "$quarterly_result" != "0" ]; then
+            echo "result=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=0" >> "$GITHUB_OUTPUT"
+          fi
           exit 0
       - name: Commit immutable snapshots, reports and diagnostics
         shell: bash
@@ -81,7 +87,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A -- data/etf/snapshots logs/runs
-          # The first official date has no comparison report yet.
+          if [ -d reports/quarterly ]; then
+            git add -A -- reports/quarterly
+          fi
+          # The first official date has no ordinary consecutive-snapshot comparison report yet.
           if [ -d reports/etf ] && [ -n "$(find reports/etf -type f -print -quit)" ]; then
             git add -A -- reports/etf
           fi
