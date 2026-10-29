@@ -4,7 +4,7 @@ An independent research repository. **Do not merge into `northstar-finance`** wi
 
 ## Current implementation scope
 
-Implemented: official Vanguard UK professional GPX collector for `VWCE` (port ID 9679, ISIN `IE00BK5BQT80`) and `VFEA` (port ID 9678, ISIN `IE00BK5BR733`); full cursor pagination; identity and date validation; archived immutable source rows; stable ISIN/SEDOL normalization; distinct-as-of comparisons; detailed Markdown/JSON reports; run/error logs; scheduled GitHub Actions; offline unit tests. Zero third-party dependencies.
+Implemented: official Vanguard UK professional GPX collector for `VWCE` (port ID 9679, ISIN `IE00BK5BQT80`) and `VFEA` (port ID 9678, ISIN `IE00BK5BR733`); full cursor pagination; identity and date validation; archived immutable source rows; stable ISIN/SEDOL normalization; distinct-as-of comparisons; concise additions/removals-only Markdown/JSON reports; run/error logs; scheduled GitHub Actions; offline unit tests. Zero third-party dependencies.
 
 **Live integration status (29 October 2026): PASSED on GitHub-hosted runners.** The official API returned 4,235 rows for VWCE and 2,382 for VFEA, both dated 30 September 2026. One zero-weight legacy Hanergy row in each fund has no usable ISIN/SEDOL: both are retained in raw sources and explicitly excluded from verified equity joins. Synthetic test records are never committed as real holdings. Production archive commits begin only after merge. Comparison reports require two distinct official snapshot dates.
 
@@ -14,12 +14,21 @@ Implemented: official Vanguard UK professional GPX collector for `VWCE` (port ID
 python -m unittest discover -s tests -v
 python -m northstar collect --root .
 python -m northstar compare --root .
+python -m northstar quarterly --year 2026 --root .
 python -m northstar status --root .
 ```
 
-`collect` makes HTTPS POST requests only to `https://www.vanguard.co.uk/gpx/graphql`, archives only after complete pagination, and saves immutable `data/etf/snapshots/<ETF>/<OFFICIAL_AS_OF>/<SOURCE_SHA256>.json` files. A newly retrieved file with the same date and same contents is a no-op; a revised file with the same as-of date gets a second immutable version and **blocks further comparisons for manual review**. A new official month creates an additional dated snapshot and a full difference report in `reports/etf/<ETF>/`. A first snapshot produces a truthful insufficient-history status.
+`collect` makes HTTPS POST requests only to `https://www.vanguard.co.uk/gpx/graphql`, archives only after complete pagination, and saves immutable `data/etf/snapshots/<ETF>/<OFFICIAL_AS_OF>/<SOURCE_SHA256>.json` files. A newly retrieved file with the same date and same contents is a no-op; a revised file with the same as-of date gets a second immutable version and **blocks further comparisons for manual review**. A new official month creates an additional dated snapshot and an additions/removals-only difference report in `reports/etf/<ETF>/`. A first snapshot produces a truthful insufficient-history status.
 
 The scheduled workflow runs every **Wednesday 04:00 UTC / 09:30 IST** and may be started manually using GitHub Actions → Vanguard holdings — archive and verify → Run workflow. Logs are committed even after partial failure; the workflow is marked failed, not green, if collection/verification fails. GitHub schedule executions can be delayed/skipped by GitHub.
+
+## 2026 quarterly trial: Q1 / Q2 / Q3
+
+Quarter-end targets are **2026-03-31, 2026-06-30 and 2026-09-30**. The production archive started in October 2026, and currently holds only the official **2026-09-30** holdings for both ETFs. Previous quarters **cannot be reconstructed from current API responses**, factsheet top tens, or another Vanguard fund.
+
+Run `python -m northstar quarterly --year 2026 --root .` to create `reports/quarterly/VWCE/2026.md` and `reports/quarterly/VFEA/2026.md`. Missing complete quarter-end files are clearly labeled **unverifiable**; the program never fills them with synthetic data. If source-verified complete Q1/Q2 archives are later obtained and normalized using the same validated schema, the reports will show **only new holdings and complete exits** for Q1→Q2, Q2→Q3, and cumulative Q1→Q3. Unchanged positions and weight changes are deliberately excluded from human-facing reports and compact comparison JSON. Full raw snapshots retain all securities.
+
+Vanguard's official passive ETF holdings disclosure policy normally publishes complete month-end holdings with a 15-calendar-day lag. It does not promise historical downloads to the public. The correct research request for a historical backfill is **complete official holdings for each specific fund and as-of date** with stable securities identifiers; do not use only the 10 largest holdings.
 
 ## Data layers planned
 
@@ -31,7 +40,8 @@ northstar/                                # Collector and comparison modules
   compare.py
 tests/                                    # Offline synthetic-data tests
 data/etf/snapshots/{VWCE,VFEA}/           # Immutable official holdings
-reports/etf/{VWCE,VFEA}/                  # Immutable official date comparisons
+reports/etf/{VWCE,VFEA}/                  # Immutable additions/removals-only comparisons
+reports/quarterly/{VWCE,VFEA}/           # Exact-quarter status and compact differences
 logs/runs/                                # Timestamped execution and failure records
 data/institutional/                       # Phase 2: EDGAR 13F + amendments
     (future: quarterly filings indexed by CIK/accession)

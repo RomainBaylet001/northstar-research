@@ -129,48 +129,53 @@ def compare(old, new):
     }
 
 
+def changes_only(report):
+    """Small auditable report; full official holdings stay in immutable archives."""
+    columns = (
+        "status", "fund", "fund_isin", "old_as_of", "new_as_of",
+        "old_source", "new_source", "old_source_sha256", "new_source_sha256",
+        "old_count", "new_count", "additions", "removals",
+        "unidentified_zero_weight_old", "unidentified_zero_weight_new", "limits",
+        "old_archive", "new_archive",
+    )
+    return {key: report[key] for key in columns if key in report}
+
+
 def markdown(report):
+    """Only report entrants/exits; never enumerate long-held unchanged positions."""
     s = [
-        "# " + report["fund"] + " official Vanguard holdings comparison",
+        "# " + report["fund"] + " — verified additions and removals",
         "",
-        "Official effective dates: **" + report["old_as_of"] + " → " + report["new_as_of"] + "**",
+        "Official holdings dates: **" + report["old_as_of"] + " → " + report["new_as_of"] + "**",
         "",
-        "Fund ISIN: " + report["fund_isin"],
-        "",
-        "Primary source: " + report["new_source"],
-        "",
-        "Equity positions with verified identifiers: " + str(report["old_count"]) + " → " + str(report["new_count"]),
-        "",
-        "Zero-weight, unidentified source rows retained but excluded from comparison: " +
-        str(len(report["unidentified_zero_weight_old"])) + " → " +
-        str(len(report["unidentified_zero_weight_new"])),
-        "",
-        "Identifier-matched additions: **" + str(len(report["additions"])) + "**; removals: **" + str(len(report["removals"])) + "**.",
+        "Source: " + report["new_source"], "",
+        "Fund ISIN: " + report["fund_isin"], "",
+        "Equity positions with usable IDs: " + str(report["old_count"]) + " → " + str(report["new_count"]), "",
+        "New securities: **" + str(len(report["additions"])) +
+        "** · Fully removed securities: **" + str(len(report["removals"])) + "**", "",
+        "Unchanged constituents and mere weight/share changes are deliberately omitted.",
         "",
     ]
-    for label in ("additions", "removals"):
-        s += ["## " + label.title(), "", "| Company | Ticker | ISIN | SEDOL | Country | Sector | Old % | New % |",
-              "|---|---|---|---|---|---|---:|---:|"]
+    for label, heading in (("additions", "Newly added"), ("removals", "Fully removed")):
+        s += ["## " + heading, "", "| Company | Ticker | ISIN | Country | Sector | Previous weight | Current weight |",
+              "|---|---|---|---|---|---:|---:|"]
         for row in report[label]:
-            s += ["| " + " | ".join(str(row.get(k) or "").replace("|", "/") for k in (
-                "name", "ticker", "isin", "sedol", "country", "sector", "old_weight_pct", "new_weight_pct")) + " |"]
+            s.append("| " + " | ".join(str(row.get(k, "") or "").replace("|", "/") for k in
+                     ("name", "ticker", "isin", "country", "sector", "old_weight_pct", "new_weight_pct")) + " |")
         if not report[label]:
-            s.append("| None verified | | | | | | | |")
-        s += [""]
-    s += ["## Largest weight changes in matched securities", "",
-          "| Company | ISIN | Old % | New % | Delta bps | Shares delta |",
-          "|---|---|---:|---:|---:|---:|"]
-    for r in report["matched_changes"][:25]:
-        values = [r["name"], r["isin"], r["old_weight_pct"], r["new_weight_pct"], r["delta_bps"],
-                  r["shares_delta"] or "Unavailable"]
-        s.append("| " + " | ".join(str(v).replace("|", "/") for v in values) + " |")
-    for field in ("country", "sector"):
-        s += ["", "## " + field.title() + " allocations", "",
-              "| Classification | Old % | New % | Delta bps |", "|---|---:|---:|---:|"]
-        for r in report["allocations"][field]:
-            s.append("| " + " | ".join(r[k] for k in ("name", "old_pct", "new_pct", "delta_bps")) + " |")
-    s += ["", "## Interpretation limits", ""]
-    s += ["- " + text for text in report["limits"]]
+            s.append("| None verified | | | | | | |")
+        s.append("")
+    s += [
+        "## Interpretation and data quality", "",
+        "- Entry/exit refers to fund holdings, not necessarily FTSE benchmark constituents.",
+        "- Changes can result from corporate actions, share class changes, replication, or index rebalancing.",
+        "- Same-ISIN holdings remain present even when their market weight or share count changes.",
+        "- Zero-weight unidentified positions remain in the original archive but are excluded from verified entries/exits.",
+        "- Comparisons require two complete, independently dated official snapshots.",
+        "",
+        "Previous source SHA-256: " + report["old_source_sha256"], "",
+        "Current source SHA-256: " + report["new_source_sha256"], "",
+    ]
     return "\n".join(s) + "\n"
 
 
@@ -190,7 +195,7 @@ def latest(root, fund):
     json_file, md_file = directory / (stem + ".json"), directory / (stem + ".md")
     if not json_file.exists():
         with json_file.open("x", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=2, ensure_ascii=False)
+            json.dump(changes_only(report), fh, indent=2, ensure_ascii=False)
             fh.write("\n")
     if not md_file.exists():
         with md_file.open("x", encoding="utf-8") as fh:
